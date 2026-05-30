@@ -1,0 +1,29 @@
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+
+# Load the pretrained model and tokenizer
+model_name = 'google/flan-t5-base'
+model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
+
+# Define the input sentence to tokenize
+sentence = 'rescuers have found the two black boxes'
+
+# Encode the sentence to obtain token IDs
+sentence_encoded = tokenizer(sentence, return_tensors='pt')  # Returns PyTorch tensors by default
+
+# Decode the token IDs back to the original sentence (skipping special tokens)
+sentence_decoded = tokenizer.decode(sentence_encoded["input_ids"][0], skip_special_tokens=True)
+
+print('Encoded Sentence:')
+print(sentence_encoded["input_ids"])
+
+print('\nDecoded Sentence:')
+print(sentence_decoded)
+
+# Convert token IDs to their corresponding token strings
+input_ids = sentence_encoded["input_ids"][0].tolist()
+tokens = tokenizer.convert_ids_to_tokens(input_ids)
+
+print('\nCorresponding Tokens:')
+for idx, token in zip(input_ids, tokens):
+    print(f'Index {idx}: {token}')

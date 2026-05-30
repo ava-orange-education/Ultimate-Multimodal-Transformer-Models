@@ -1,0 +1,74 @@
+import os
+import openai
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.decomposition import PCA
+from sklearn.metrics.pairwise import cosine_similarity
+
+# Step 1: Set OpenAI API key securely
+api_key = input("Enter your OpenAI API key: ")
+os.environ["OPENAI_API_KEY"] = api_key
+openai.api_key = api_key
+
+# Step 2: Define embedding model
+embedding_model = "text-embedding-3-small"
+
+# Step 3: Define our sample words dataframe
+words = pd.DataFrame({'text': [
+    "wise", "old", "king", "ruled", "kingdom", "kindness", "wisdom",
+    "grand", "palace", "king", "sat", "majestic", "throne",
+    "loyal", "followers", "cheered", "king", "entered", "city",
+    "magnificent", "crown", "adorned", "head", "king",
+    "brave", "knights", "served", "king", "unwavering", "royalty",
+    "king", "castle", "stood", "tall", "overlooking", "city",
+    "king", "benevolent", "rule", "earned", "people", "love", "respect",
+    "king", "reign", "mark", "peace", "prosperity",
+    "king", "authority", "extended", "every", "corner", "realm",
+    "cat", "sat", "on", "mat",
+    "machine", "learning", "algorithm",
+    "car", "hit", "on", "truck",
+    "black", "cat", "sat", "couch", "brown", "dog", "slept", "rug",
+    "traditional", "model", "corporate", "training", "involves", "companies", "intermediaries",
+    "machine", "learning", "decision"
+]})
+
+# Step 4: Function to get embedding from OpenAI API
+def get_embedding(text):
+    response = openai.embeddings.create(input=text, model=embedding_model)
+    return response.data[0].embedding
+
+# Step 5: Generate embeddings for all words
+print("Generating embeddings for words, this may take a moment...")
+words["embedding"] = words.text.apply(lambda x: get_embedding(x))
+print("Embeddings generated.")
+
+# Step 6: Verify embedding size on any word
+embedding_length = len(words["embedding"][0])
+print(f"Embedding vector size: {embedding_length}")
+
+# Step 7: Define function to compute cosine similarity
+def compute_cosine_similarity(df, idx1, idx2):
+    embedding_vec1 = df.embedding[idx1]
+    embedding_vec2 = df.embedding[idx2]
+    print(f"Cosine similarity between '{df.text[idx1]}' and '{df.text[idx2]}' is...")
+    print(cosine_similarity([embedding_vec1], [embedding_vec2]))
+
+# Step 8: PCA visualization of embeddings
+embedding_array = np.vstack(words['embedding'].values)
+tokens = words['text'].tolist()
+
+pca = PCA(n_components=2)
+word_vectors_2d = pca.fit_transform(embedding_array)
+
+plt.figure(figsize=(15, 10))
+plt.scatter(word_vectors_2d[:, 0], word_vectors_2d[:, 1])
+
+for i, token in enumerate(tokens):
+    plt.annotate(token, xy=(word_vectors_2d[i, 0], word_vectors_2d[i, 1]))
+
+plt.title("Word Embeddings in 2D Space using PCA")
+plt.xlabel("PCA Feature 1")
+plt.ylabel("PCA Feature 2")
+plt.grid(True)
+plt.show()

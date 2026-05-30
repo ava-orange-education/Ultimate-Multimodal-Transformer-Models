@@ -1,0 +1,104 @@
+!pip install transformers datasets scikit-learn torch tqdm
+from transformers import BertTokenizer, BertModel
+import torch.nn as nn
+import torch
+import numpy as np
+from tqdm import tqdm
+from datasets import load_dataset
+
+# Load the AG News dataset
+dataset = load_dataset('ag_news')
+
+# Split the dataset into training and test sets
+train_dataset = dataset['train']
+test_dataset = dataset['test']
+
+# Explore the dataset
+print(f"Number of training samples: {len(train_dataset)}")
+print(f"Number of test samples: {len(test_dataset)}")
+print(train_dataset[0])
+# Define label names
+label_names = ['World', 'Sports', 'Business', 'Sci/Tech']
+
+# Extract texts and labels
+train_texts = train_dataset['text']
+train_labels = train_dataset['label']
+train_labels = torch.tensor(train_labels)
+
+test_texts = test_dataset['text']
+test_labels = test_dataset['label']
+test_labels = torch.tensor(test_labels)
+# Tokenize the dataset
+train_encodings = tokenizer(train_texts, truncation=True, padding=True, max_length=128,return_tensors='pt')
+test_encodings = tokenizer(test_texts, truncation=True, padding=True, max_length=128,return_tensors='pt')
+# Load the pre-trained BERT model
+model = BertModel.from_pretrained('bert-base-uncased')
+
+# Move model to GPU if available
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+model.to(device)
+# Define a classification layer with 4 output nodes
+classifier = nn.Linear(model.config.hidden_size, 4)  # 4 classes (World, Sports, Business, Sci/Tech)
+classifier.to(device)
+
+from torch.utils.data import DataLoader, TensorDataset
+from transformers import AdamW
+
+# Create TensorDataset for DataLoader
+train_dataset = TensorDataset(train_encodings['input_ids'], train_encodings['attention_mask'], train_labels)
+test_dataset = TensorDataset(test_encodings['input_ids'], test_encodings['attention_mask'], test_labels)
+
+# Create DataLoader
+train_loader = DataLoader(train_dataset, batch_size=50, shuffle=True)
+test_loader = DataLoader(test_dataset, batch_size=50, shuffle=False)
+
+# Define the optimizer for the classifier layer (Adam With Weight Decay - L2 Reg to avoid over fitting)
+# Define the optimizer for both BERT model and classifier
+# Usually, we use a smaller learning rate for BERT (pretrained) and a higher learning rate for the classifier
+optimizer = AdamW([
+    {'params': model.parameters(), 'lr': 5e-3},  # Smaller learning rate for BERT
+    {'params': classifier.parameters(), 'lr': 1e-2}  # Larger learning rate for classifier
+])
+
+# Define loss function
+loss_fn = nn.CrossEntropyLoss()
+
+# Training loop
+def train_model(model, classifier, train_loader, optimizer, loss_fn, device, epochs=3):
+    model.train()  # Set BERT model to training mode
+    classifier.train()  # We want to train the classifier layer (top layer (dim=-1))
+
+    for epoch in range(epochs):
+        print(f"Epoch {epoch+1}/{epochs}")
+        epoch_loss = 0
+        #batch is a tuple containing a batch of inputs (tokenized text), attention masks, and labels.
+        for batch in tqdm(train_loader):
+            input_ids = batch[0].to(device)
+            attention_mask = batch[1].to(device)
+            labels = batch[2].to(device)
+
+            # Forward pass through BERT (we don't update these weights)
+            outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+            cls_embeddings = outputs.last_hidden_state[:, 0, :]  # [CLS] token representation
+
+            # Forward pass through the classifier
+            logits = classifier(cls_embeddings)
+
+            # Calculate loss
+            loss = loss_fn(logits, labels)
+
+            # Backward pass and optimization
+            #In PyTorch, gradients are accumulated by default.
+            #This means that if we don't clear the gradients, they will be added to the gradients computed from the previous batch.
+            optimizer.zero_grad() #Before we compute the gradients for the current batch, we need to reset (or "zero out") the gradients
+            loss.backward()
+            #This line performs the optimization step,
+            #where the actual model parameters (weights) are updated based on the gradients calculated in the previous step.
+            optimizer.step()
+
+            epoch_loss += loss.item()
+
+        print(f"Training loss: {epoch_loss/len(train_loader)}")
+
+# Train the model
+train_model(model, classifier, train_loader, optimizer, loss_fn, device, epochs=3)

@@ -1,0 +1,37 @@
+import numpy as np
+
+def getPositionEncoding(seq_len, d, n=10000):
+    """
+    Generate sinusoidal positional encoding matrix.
+    
+    Args:
+        seq_len (int): Length of the sequence (number of positions).
+        d (int): Embedding dimension size.
+        n (int): Scaling factor for frequency (default 10000).
+    
+    Returns:
+        np.ndarray: Positional encoding matrix of shape (seq_len, d)
+    """
+    P = np.zeros((seq_len, d))
+    for pos in range(seq_len):
+        for i in range(d // 2):
+            denominator = np.power(n, 2 * i / d)
+            P[pos, 2 * i] = np.sin(pos / denominator)
+            P[pos, 2 * i + 1] = np.cos(pos / denominator)
+    return P
+
+# Example usage:
+# 1. Generate positional encoding for sequence length 100 and embedding dimension 1536
+P = getPositionEncoding(seq_len=100, d=1536, n=10000)
+
+# 2. Add positional encoding to word embeddings at respective positions
+# Example: words.embedding[index] + positional encoding vector at that position
+
+# brown at position 9, dog at position 10 (indices from example)
+brown_T10 = words.embedding[69] + P[9]
+dog_T11 = words.embedding[70] + P[10]
+
+# 3. Compute cosine similarity to illustrate contextual addition
+from sklearn.metrics.pairwise import cosine_similarity
+similarity = cosine_similarity([brown_T10], [dog_T11])
+print(similarity)  # Expected higher similarity due to positional encoding context

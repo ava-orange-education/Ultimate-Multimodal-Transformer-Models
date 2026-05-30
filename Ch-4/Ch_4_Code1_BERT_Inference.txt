@@ -1,0 +1,68 @@
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
+import torch
+
+# Load pre-trained tokenizer and model
+model_name = 'distilbert-base-uncased-finetuned-sst-2-english'
+tokenizer = AutoTokenizer.from_pretrained(model_name, force_download=True)
+model = AutoModelForSequenceClassification.from_pretrained(model_name, force_download=True)
+
+# Example sentence
+sentence = "I love this movie! It's absolutely fantastic."
+
+# Tokenize the sentence
+inputs = tokenizer(sentence, return_tensors="pt")
+
+# Get model predictions (without training - using directly for Inference)
+with torch.no_grad():
+    outputs = model(**inputs)
+
+
+# Apply softmax to get probabilities
+probabilities = torch.nn.functional.softmax(outputs.logits, dim=-1)
+
+# Get the predicted class (0 = negative, 1 = positive)
+predicted_class = torch.argmax(probabilities, dim=1).item()
+
+# Convert predicted class index to label
+labels = ['NEGATIVE', 'POSITIVE']
+predicted_label = labels[predicted_class]
+
+# Get the confidence score of the predicted class
+prob_score = probabilities[0][predicted_class].item()
+
+# Print the result
+print(sentence)
+print(f"Predicted Label: {predicted_label}, Probability Score: {prob_score:.4f}")
+
+#I love this movie! It's absolutely fantastic.
+#Predicted Label: POSITIVE, Probability Score: 0.9999
+
+# Example sentence
+sentence = "Completely lacking in good service, good food and good ambience"
+
+#Predicted Label: NEGATIVE, Probability Score: 0.9996
+
+#Import Hugging Face pipeline that contains several transformer usages
+from transformers import pipeline
+text_NER=pipeline('ner')
+print(text_NER('William is working as a Data Scientist at Amazon, Bangalore office '))
+
+pos_model = "vblagoje/bert-english-uncased-finetuned-pos"
+tokenizer = AutoTokenizer.from_pretrained(pos_model)
+
+pos_pipeline = pipeline(
+    "token-classification", 
+    model=pos_model, 
+    tokenizer=tokenizer, 
+    # This is the option you use to get word-level POS tags
+    aggregation_strategy="simple" 
+)
+example_sentence = "The quick brown fox jumps over the lazy dog."
+# Run the inference
+results = pos_pipeline(example_sentence)
+# Print the results
+print(f"Example Sentence: {example_sentence}\n")
+print("POS Tagging Results:")
+for result in results:
+    # 'entity_group' is the predicted POS tag
+    print(f"Word: {result['word']:<10} Tag: {result['entity_group']}")

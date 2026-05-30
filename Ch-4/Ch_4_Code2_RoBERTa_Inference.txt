@@ -1,0 +1,25 @@
+!pip install torch torchdata transformers
+from transformers import AutoTokenizer,AutoModelForSequenceClassification
+
+model_name='facebook/roberta-hate-speech-dynabench-r4-target'
+tokenizer=AutoTokenizer.from_pretrained(model_name)
+sent_model=AutoModelForSequenceClassification.from_pretrained(model_name)
+print(sent_model.config.id2label)
+
+#Example sanity check
+sent1='I am so kind of you, thank you for warm words'
+sent1_input_ids=tokenizer(sent1,return_tensors="pt").input_ids
+logits=sent_model(input_ids=sent1_input_ids).logits
+print(f"logits [not hate,hate]: {logits.tolist()[0]}")
+
+#Print the probabilities of Hate,Not_Hate
+prob=logits.softmax(dim=-1).tolist()[0]
+print(f"Probabilities [not hate,hate]: {prob}")
+
+sent2 = "They should all be banned and sent back to where they came from."
+sent2_input_ids = tokenizer(sent2, return_tensors="pt").input_ids
+logits = sent_model(input_ids=sent2_input_ids).logits
+print(f"logits [nothate, hate]: {logits.tolist()[0]}")
+
+prob = logits.softmax(dim=-1).tolist()[0]
+print(f"Probabilities [nothate, hate]: {prob}")
