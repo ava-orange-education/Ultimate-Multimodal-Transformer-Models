@@ -1,0 +1,125 @@
+!pip install datasets transformers torch
+from transformers import ViTModel, ViTImageProcessor
+import torch
+from keras.datasets import cifar10
+import matplotlib.pyplot as plt
+import numpy as np
+(train_images, train_labels), (test_images, test_labels) = cifar10.load_data()
+train_images.shape
+(50000, 32, 32, 3)
+#Define the image names
+class_names = ['airplane', 'automobile', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck']
+#Test the number of unique image types
+num = len(class_names)
+print(f"Number of unique image types in CIFAR-10 dataset: {num}")
+#Display labels for the first few images
+print("Labels for the first 4 training images:")
+for i in range(4):
+    label_index = train_labels.flatten()[i]
+    print(f"Image {i+1}: Label index {label_index}, Name: {class_names[label_index]}")
+#Visualize first four images with labels
+plt.figure(figsize=(3, 3))
+for i in range(4):
+    plt.subplot(1, 4, i + 1)
+    plt.imshow(train_images[i])
+    plt.title(class_names[train_labels.flatten()[i]])
+    plt.axis('off')
+plt.show()
+Labels for the first 4 training images:
+Image 1: Label index 6, Name: frog
+Image 2: Label index 9, Name: truck
+Image 3: Label index 9, Name: truck
+Image 4: Label index 4, Name: deer
+# Load pre-trained ViT model and image processor
+model_name = 'google/vit-base-patch16-224-in21k'
+model = ViTModel.from_pretrained(model_name)
+img_prep = ViTImageProcessor.from_pretrained(model_name)
+# Load and preprocess an image
+image = train_images[5]
+inputs = img_prep(images=image, return_tensors='pt')
+# Pass the preprocessed image through the model
+with torch.no_grad():
+    outputs = model(**inputs)
+# Extract the last hidden state (CLS token embedding)
+cls_embedding = outputs.last_hidden_state[:, 0, :].numpy()
+# Print the CLASS embedding for the single image
+print("CLASS Embedding Shape:", cls_embedding.shape)
+print("CLASS Embedding:", cls_embedding)
+CLASS Embedding Shape: (1, 768)
+CLASS Embedding: [[-1.02260873e-01 -4.46649760e-01 … -5.01607209e 02]]
+# Truncate for speed
+n_samples = 100
+mini_images = test_images[:n_samples]
+mini_labels = test_labels[:n_samples].flatten() 
+mini_inputs = img_prep(images=mini_images, return_tensors='pt')
+# Batch extract (even smaller batches for demo)
+embeddings = []
+batch_size = 32
+for i in range(0, n_samples, batch_size):
+    batch = {k: v[i:i+batch_size] for k, v in mini_inputs.items()}
+    with torch.no_grad():
+        outputs = model(**batch)
+        cls_emb = outputs.last_hidden_state[:, 0, :].cpu().numpy()
+        embeddings.append(cls_emb)
+embed_matrix = np.vstack(embeddings)  # [100, 768]
+print("Mini embed matrix shape:", embed_matrix.shape)
+Mini embed matrix shape: (100, 768)
+# KMeans clustering
+from sklearn.cluster import KMeans
+kmeans = KMeans(n_clusters=10, random_state=42, n_init=10)
+cluster_labels = kmeans.fit_predict(embed_matrix)
+# Validation with fixed 1D labels
+from sklearn.metrics import adjusted_rand_score
+ari = adjusted_rand_score(mini_labels, cluster_labels)  
+print(f"Adjusted Rand Index: {ari:.3f} (closer to 1 = better class alignment)")
+# Preparing training and test samples
+n_samples = 100
+train_images = train_images[:n_samples]
+train_labels = train_labels[:n_samples].flatten()  
+test_images = test_images[:n_samples]
+test_labels = test_labels[:n_samples].flatten()  
+train_inputs = img_prep(images=train_images, return_tensors='pt')
+test_inputs = img_prep(images=test_images, return_tensors='pt')
+# Extracting Feature matrix from train samples
+embeddings = []
+batch_size = 5
+for i in range(0, n_samples, batch_size):
+    batch = {k: v[i:i+batch_size] for k, v in train_inputs.items()}
+    with torch.no_grad():
+        outputs = model(**batch)
+        cls_emb = outputs.last_hidden_state[:, 0, :].cpu().numpy()
+        embeddings.append(cls_emb)
+train_matrix = np.vstack(embeddings)  # [100, 768]
+print("Train matrix shape:", train_matrix.shape)
+Train matrix shape: (100, 768)
+# Extracting Feature matrix from test samples
+embeddings = []
+batch_size = 5
+for i in range(0, n_samples, batch_size):
+    batch = {k: v[i:i+batch_size] for k, v in test_inputs.items()}
+    with torch.no_grad():
+        outputs = model(**batch)
+        cls_emb = outputs.last_hidden_state[:, 0, :].cpu().numpy()
+        embeddings.append(cls_emb)
+test_matrix = np.vstack(embeddings)  # [100, 768]
+print("Test matrix shape:", test_matrix.shape)
+Test matrix shape: (100, 768)
+from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import StandardScaler
+# Normalize the features
+scaler = StandardScaler()
+train_features_scaled = scaler.fit_transform(train_matrix)
+test_features_scaled = scaler.transform(test_matrix)
+# Initialize the classifier
+clf = LogisticRegression(max_iter=1000)
+# Train the classifier
+clf.fit(train_features_scaled, train_labels)
+from sklearn.metrics import accuracy_score, classification_report
+# Make predictions on the test set
+test_preds = clf.predict(test_features_scaled)
+# Calculate accuracy
+accuracy = accuracy_score(test_labels, test_preds)
+print(f"Test Accuracy: {accuracy * 100:.2f}%")
+Test Accuracy: 93.00%
+report = classification_report(test_labels, test_preds, target_names=class_names)
+print(report)
